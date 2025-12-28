@@ -1,0 +1,49 @@
+name: Daily Speedtest
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天 UTC 0点 (北京时间 8点) 运行
+  workflow_dispatch: # 允许手动点击按钮触发
+
+permissions:
+  contents: write
+
+jobs:
+  speedtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # 拉取完整历史，避免变基失败
+
+      - name: Download CloudflareSpeedTest
+        run: |
+          # 下载 XIU2 的 CloudflareSpeedTest (Linux amd64版本)
+          wget -N https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.2.5/CloudflareST_linux_amd64.tar.gz
+          tar -zxf CloudflareST_linux_amd64.tar.gz
+          chmod +x CloudflareST
+
+      - name: Run SpeedTest
+        run: |
+          # 运行测速
+          # 输出到 ip.csv
+          ./CloudflareST -tll 40 -tl 200 -dn 20 -o ip.csv -p 0
+
+      - name: Commit and Push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add ip.csv
+          
+          # 只有当文件发生变化时才提交
+          if [[ -n $(git status -s) ]]; then
+            git commit -m "Update speedtest result [$(date)]"
+            
+            # ———————— 核心修改：解决冲突 ————————
+            # 先拉取远程最新代码（变基模式），再推送
+            git pull --rebase origin main
+            git push
+          else
+            echo "No changes to commit"
+          fi
