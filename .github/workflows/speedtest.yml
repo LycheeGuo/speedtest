@@ -2,8 +2,8 @@ name: Daily Speedtest (London UK)
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 每天 UTC 0点（北京时间 8点）
-  workflow_dispatch:
+    - cron: '0 0 * * *' # 每天 UTC 0点 (北京时间 8点) 运行
+  workflow_dispatch: # 允许手动点击按钮触发
 
 permissions:
   contents: write
@@ -11,7 +11,6 @@ permissions:
 jobs:
   speedtest:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -24,32 +23,36 @@ jobs:
           tar -zxf CloudflareST_linux_amd64.tar.gz
           chmod +x CloudflareST
 
-      - name: Run SpeedTest (UK Filter, CSV Output)
+      - name: Run SpeedTest (UK Filter)
         run: |
-          # 优先锁定英国节点（跨洋延迟需放宽）
-          ./CloudflareST -cfcolo LHR,MAN,LGW -tll 300 -tl 400 -dn 50 -f csv -o ip.csv -p 0
+          # 1. 测速并锁定英国地区 (LHR, MAN, LGW)
+          # 修改点：将输出文件名改为 ip.csv，这样生成的就是 CSV 文件
+          ./CloudflareST -cfcolo LHR,MAN,LGW -tll 300 -tl 400 -dn 50 -o ip.csv -p 0
 
-          # 如果结果为空，自动回退
+          # 2. 检查是否为空，如果为空则自动回退
           if [ ! -s ip.csv ]; then
-            echo "⚠️ 未找到英国 IP，回退到普通模式..."
-            ./CloudflareST -tll 200 -tl 300 -dn 50 -f csv -o ip.csv -p 0
-          fi
-
-          # 仍为空则失败，防止提交空文件
-          if [ ! -s ip.csv ]; then
-            echo "❌ SpeedTest failed, no valid output."
-            exit 1
+            echo "⚠️  未找到英国 IP，尝试回退到普通模式..."
+            # 修改点：回退模式同样输出为 ip.csv
+            ./CloudflareST -tll 200 -tl 300 -dn 50 -o ip.csv -p 0
           fi
 
       - name: Commit and Push changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-
+          
+          # 强制删除旧的 txt 文件（如果有），防止目录下同时存在 csv 和 txt
+          rm -f ip.txt
+          
+          # 添加生成的 csv 文件
           git add ip.csv
-
+          
+          # 检查状态，如果有变化则提交
           if [[ -n $(git status -s) ]]; then
-            git commit -m "Update London IP list (CSV) - $(date -u '+%Y-%m-%d %H:%M UTC')"
+            # 这里的逻辑就是“覆盖”：它会把 ip.csv 的最新状态推送到仓库
+            git commit -m "Update London IP list [$(date)]"
+            
+            # pull --rebase 是防止报错的关键，确保和远程仓库同步后再推送
             git pull --rebase origin main
             git push
           else
