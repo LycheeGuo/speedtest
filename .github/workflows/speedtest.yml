@@ -11,6 +11,7 @@ permissions:
 jobs:
   speedtest:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -25,27 +26,16 @@ jobs:
 
       - name: Run SpeedTest (UK Filter, CSV Output)
         run: |
-          # 1. 优先锁定英国节点（跨洋延迟需放宽）
-          ./CloudflareST \
-            -cfcolo LHR,MAN,LGW \
-            -tll 300 -tl 400 \
-            -dn 50 \
-            -f csv \
-            -o ip.csv \
-            -p 0
+          # 优先锁定英国节点（跨洋延迟需放宽）
+          ./CloudflareST -cfcolo LHR,MAN,LGW -tll 300 -tl 400 -dn 50 -f csv -o ip.csv -p 0
 
-          # 2. 如果结果为空，自动回退
+          # 如果结果为空，自动回退
           if [ ! -s ip.csv ]; then
             echo "⚠️ 未找到英国 IP，回退到普通模式..."
-            ./CloudflareST \
-              -tll 200 -tl 300 \
-              -dn 50 \
-              -f csv \
-              -o ip.csv \
-              -p 0
+            ./CloudflareST -tll 200 -tl 300 -dn 50 -f csv -o ip.csv -p 0
           fi
 
-          # 3. 再次检查，防止提交空文件
+          # 仍为空则失败，防止提交空文件
           if [ ! -s ip.csv ]; then
             echo "❌ SpeedTest failed, no valid output."
             exit 1
